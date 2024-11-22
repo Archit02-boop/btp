@@ -1,0 +1,42 @@
+import numpy as np
+import pandas as pd
+from scipy.stats import norm
+
+data = pd.read_csv('/content/NDX_option_chain.csv')
+
+data['Futures_Price'] = data['Last Trade Price']
+
+data['Strike_Price'] = data['Strike']
+
+data['Trade Date'] = pd.to_datetime(data['Trade Date'])
+data['Expiry Date'] = pd.to_datetime(data['Expiry Date'])
+data['Time_to_Maturity'] = (data['Expiry Date'] - data['Trade Date']).dt.days / 365  # Convert days to years
+
+data['Volatility'] = (data['Bid Implied Volatility'] + data['Ask Implied Volatility']) / 2
+
+data['Call_Price'] = data['Ask Price']  # Assumed as per convention
+data['Put_Price'] = data['Bid Price']   # Assumed as per convention
+
+def calculate_mb_prices(row, option_type='call'):
+    F = row['Futures_Price']
+    K = row['Strike_Price']
+    T = row['Time_to_Maturity']
+    sigma = row['Volatility']
+    r = 0.05  # Assume 5% risk-free rate
+
+    d1 = (np.log(F / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+
+    if option_type == 'call':
+        return F * norm.cdf(d1) - K * norm.cdf(d2)
+    elif option_type == 'put':
+        return K * norm.cdf(-d2) - F * norm.cdf(-d1)
+
+data['MB_Call_Price'] = data.apply(calculate_mb_prices, axis=1, option_type='call')
+data['MB_Put_Price'] = data.apply(calculate_mb_prices, axis=1, option_type='put')
+
+data['Moneyness'] = data['Futures_Price'] / data['Strike_Price']
+
+data.to_csv('tradyflow_dataset.csv', index=False)
+
+print("Dataset converted successfully and saved to 'converted_dataset.csv'.")
